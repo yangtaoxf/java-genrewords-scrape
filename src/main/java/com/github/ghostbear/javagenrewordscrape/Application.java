@@ -21,6 +21,7 @@ public class Application {
 
   public void init() {
     // BUG: All genres doesn't get loaded. Could probably be fixed with OkHttp
+    // TODO: Split fillDatabase into insert, insertGenre, and insertWord
     String _url = System.getenv("SCRAPE_URL");
     if (_url == null) {
       System.out.println("Couldn't find SCRAPE_URL in env");
