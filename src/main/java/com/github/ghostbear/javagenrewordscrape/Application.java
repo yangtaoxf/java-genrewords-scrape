@@ -1,13 +1,16 @@
 package com.github.ghostbear.javagenrewordscrape;
 
-import org.jsoup.Connection;
+import static org.neo4j.driver.v1.Values.parameters;
+
+import java.io.IOException;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.neo4j.driver.v1.*;
-
-import static org.neo4j.driver.v1.Values.parameters;
 
 public class Application {
 
@@ -20,7 +23,6 @@ public class Application {
   }
 
   public void init() {
-    // BUG: All genres doesn't get loaded. Could probably be fixed with OkHttp
     String _url = System.getenv("SCRAPE_URL");
     if (_url == null) {
       System.out.println("Couldn't find SCRAPE_URL in env");
@@ -46,11 +48,22 @@ public class Application {
     fillDatabase(scrape);
   }
 
+  private OkHttpClient client = new OkHttpClient();
+
+  public String run(String url) throws IOException {
+    Request request = new Request.Builder()
+            .url(url)
+            .build();
+
+    try (Response response = client.newCall(request).execute()) {
+      return response.body().string();
+    }
+  }
+
   public Elements scrape(String url) {
     try {
-      Connection connect = Jsoup.connect(url);
-      Connection.Response execute = connect.execute();
-      Document parse = execute.parse();
+      String html = run(url);
+      Document parse = Jsoup.parse(html);
       Elements tableRows = parse.select("table tr");
       return tableRows;
     } catch (Exception e) {
@@ -104,8 +117,8 @@ public class Application {
       Integer _id = session.writeTransaction(tx -> {
         StatementResult statementResult = tx.run("MATCH (a:Genre) " +
                         "WHERE id(a)=$id " +
-                        "MERGE (b:WORD {word:$word}) " +
-                        "CREATE (a)-[:IN_WORD]->(b)-[:IN_GENRE]->(a) " +
+                        "MERGE (b:Word {word:$word}) " +
+                        "MERGE (a)-[:IN_WORD]->(b)-[:IN_GENRE]->(a) " +
                         "RETURN id(b)",
                 parameters("id", id, "word", word));
         return statementResult.single().get(0).asInt();

@@ -18,6 +18,7 @@ repositories {
 }
 
 dependencies {
+    compile("com.squareup.okhttp3:okhttp:4.2.1")
     compile("org.jsoup:jsoup:1.12.1")
     compile("org.neo4j.driver:neo4j-java-driver:1.7.2")
 }
