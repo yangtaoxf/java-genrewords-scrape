@@ -21,7 +21,6 @@ public class Application {
 
   public void init() {
     // BUG: All genres doesn't get loaded. Could probably be fixed with OkHttp
-    // TODO: Split fillDatabase into insert, insertGenre, and insertWord
     String _url = System.getenv("SCRAPE_URL");
     if (_url == null) {
       System.out.println("Couldn't find SCRAPE_URL in env");
@@ -67,28 +66,50 @@ public class Application {
   }
 
   public void fillDatabase(Elements rows) {
+    for (Element row : rows) {
+      Element genre = row.selectFirst("td:first-child a");
+      Elements words = row.select("td:last-child");
+      insert(genre, words);
+    }
+    driver.close();
+  }
+
+  public void insert(Element genre, Elements words) {
+    String _genre = genre.text();
+    String[] _words = words.text().split(" ");
+    insertGenre(_genre, _words);
+  }
+
+  public void insertGenre(String genre, String[] words) {
     try (Session session = driver.session()) {
-      for (Element row : rows) {
-        Element genre = row.selectFirst("td:first-child a");
-        String textGenre = genre.text();
-        Elements words = row.select("td:last-child");
-        String[] textWords = words.text().split(" ");
-        for (String textWord : textWords) {
-          session.writeTransaction(new TransactionWork<String>() {
-            @Override
-            public String execute(Transaction tx) {
+      Integer id = session.writeTransaction(tx -> {
+        StatementResult statementResult = tx.run("MERGE (a:Genre {genre:$genre}) " +
+                        "RETURN id(a)",
+                parameters("genre", genre));
+        return statementResult.single().get(0).asInt();
+      });
+      System.out.println(id + ": " + genre);
+      insertWords(id, words);
+    }
+  }
 
-              StatementResult statementResult = tx.run("MERGE (a:Genre {genre:$genre}) " +
-                              "MERGE (b:Word {word:$word}) " +
-                              "CREATE (b)-[:IN_GENRE]->(a)-[:IN_WORD]->(b) RETURN a.genre",
-                      parameters("genre", textGenre, "word", textWord));
-              System.out.println(statementResult.single().get(0).asString());
+  public void insertWords(Integer id, String[] words) {
+    for (String word : words) {
+      insertWord(id, word);
+    }
+  }
 
-              return "null";
-            }
-          });
-        }
-      }
+  public void insertWord(Integer id, String word) {
+    try (Session session = driver.session()) {
+      Integer _id = session.writeTransaction(tx -> {
+        StatementResult statementResult = tx.run("MATCH (a:Genre) " +
+                        "WHERE id(a)=$id " +
+                        "MERGE (b:WORD {word:$word}) " +
+                        "CREATE (a)-[:IN_WORD]->(b)-[:IN_GENRE]->(a) " +
+                        "RETURN id(b)",
+                parameters("id", id, "word", word));
+        return statementResult.single().get(0).asInt();
+      });
     }
   }
 }
